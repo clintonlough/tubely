@@ -4,6 +4,9 @@ import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
+import path from "node:path";
+import { bundlerModuleNameResolver } from "typescript";
+
 
 type Thumbnail = {
   data: ArrayBuffer;
@@ -59,15 +62,10 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   //Check file size and error if file too large
   const MAX_UPLOAD_SIZE = 10 << 20;
-  console.log(`file size = ${fileData.size}`);
   if (fileData.size > MAX_UPLOAD_SIZE) {
     throw new BadRequestError("File too large and must not exceed 10MB in size");
   }
-  //Read file contents into an array buffer
-  const fileType = fileData.type;
-  console.log(`file type  = ${fileType}`);
-  let thumbnailData = new ArrayBuffer(fileData.size);
-  thumbnailData = await fileData.arrayBuffer();
+
   // Get video metadata from database and check owner
   const video = getVideo(cfg.db, videoId);
   if (!video) {
@@ -76,14 +74,21 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   if (video?.userID != userID) {
     throw new UserForbiddenError("Unauthorised user");
   }
-  //Set the thumbnail data
-  const thumbnail: Thumbnail = {
-    data: thumbnailData,
-    mediaType: fileType,
-  }
-  videoThumbnails.set(videoId,thumbnail);
+
+  //Read file contents into an array buffer and converts to a buffer
+  const fileType = fileData.type;
+  let thumbnailData = new ArrayBuffer(fileData.size);
+  thumbnailData = await fileData.arrayBuffer();
+  const fileExt = fileType.split("/")[1];
+  const thumbnailName = `${videoId}.${fileExt}`;
+  const writePath = path.join(cfg.assetsRoot,thumbnailName);
+
+  //Create the file in assets
+  await Bun.write(writePath,thumbnailData);
+  const thumbnailURL = new URL(writePath, "http://localhost:8091/").toString();
+
+
   //Update video URL and write back to database
-  const thumbnailURL = `http://localhost:8091/api/thumbnails/${videoId}`;
   video.thumbnailURL = thumbnailURL;
   updateVideo(cfg.db,video)
 
