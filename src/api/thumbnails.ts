@@ -5,7 +5,7 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import path from "node:path";
-import { bundlerModuleNameResolver } from "typescript";
+import { randomBytes } from "node:crypto";
 
 
 type Thumbnail = {
@@ -55,9 +55,14 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const file = await req.formData();
   const fileData = file.get("thumbnail");
 
-  //Check file is a valid file type
+  //Check file is a valid file type and image type
   if (!(fileData instanceof File)) {
     throw new BadRequestError("Invalid file type");
+  }
+  const fileType = fileData.type;
+  const allowedTypes = ["image/png", "image/jpeg"];
+  if (!allowedTypes.includes(fileType)) {
+    throw new BadRequestError("Invalid file type. Only .png or .jpeg accepted");
   }
 
   //Check file size and error if file too large
@@ -76,11 +81,12 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   }
 
   //Read file contents into an array buffer and converts to a buffer
-  const fileType = fileData.type;
   let thumbnailData = new ArrayBuffer(fileData.size);
   thumbnailData = await fileData.arrayBuffer();
   const fileExt = fileType.split("/")[1];
-  const thumbnailName = `${videoId}.${fileExt}`;
+  const rndBytes = randomBytes(32);
+  const thumbnailString = rndBytes.toString('base64');
+  const thumbnailName = `${thumbnailString}.${fileExt}`;
   const writePath = path.join(cfg.assetsRoot,thumbnailName);
 
   //Create the file in assets

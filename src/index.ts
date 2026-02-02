@@ -1,8 +1,9 @@
 import { cfg } from "./config";
+import type { BunRequest } from "bun";
 import { handlerLogin, handlerRefresh, handlerRevoke } from "./api/auth";
 import {
   errorHandlingMiddleware,
-  cacheMiddleware,
+  noCacheMiddleware,
   withConfig,
 } from "./api/middleware";
 import { handlerUsersCreate } from "./api/users";
@@ -49,7 +50,7 @@ Bun.serve({
       POST: withConfig(cfg, handlerUploadThumbnail),
     },
     "/api/thumbnails/:videoId": {
-      GET: withConfig(cfg, handlerGetThumbnail),
+      GET: noCacheMiddleware(withConfig(cfg, handlerGetThumbnail)),
     },
     "/api/video_upload/:videoId": {
       POST: withConfig(cfg, handlerUploadVideo),
@@ -59,14 +60,17 @@ Bun.serve({
     },
   },
 
-  async fetch(req) {
+  async fetch(req: Request) {
     const url = new URL(req.url);
     const path = url.pathname;
 
     if (path.startsWith("/assets")) {
-      return cacheMiddleware(() =>
-        serveStaticFile(path.replace("/assets/", ""), cfg.assetsRoot)
-      )(req);
+      return noCacheMiddleware(
+        (requestToPass: BunRequest) => {
+          const filePath = path.replace("/assets/", "");
+          return serveStaticFile(filePath, cfg.assetsRoot);
+        }
+      )(req as BunRequest);
     }
 
     return new Response("Not Found", { status: 404 });
