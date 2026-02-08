@@ -90,12 +90,12 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 
     //write to database
     console.log("updating DB");
-    //video.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${uploadPath}`;
-    video.videoURL = uploadPath;
+    video.videoURL = `https://${cfg.s3CfDistribution}/${uploadPath}`;
+    //video.videoURL = uploadPath;
     
     updateVideo(cfg.db,video)
-    const signedVideo = await dbVideoToSignedVideo(cfg, video);
-    console.log(`signed video = ${signedVideo}`);
+    //const signedVideo = await dbVideoToSignedVideo(cfg, video);
+    console.log(`signed video = ${video}`);
     //delete from tmp
     console.log(`Deleting temporary file from ${tmpPath}`);
     console.log(`Deleting temporary file from ${processedVideoPath}`);
@@ -103,7 +103,7 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     await rm(processedVideoPath, { force: true });
 
 
-  return respondWithJSON(200, signedVideo);
+  return respondWithJSON(200, video);
 }
 
 //get the aspect ration of a video
