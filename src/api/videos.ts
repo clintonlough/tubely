@@ -8,10 +8,12 @@ import { getVideo, updateVideo } from "../db/videos.js";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { S3Client } from "bun";
+import type { Video } from "../db/videos.js";
 
 export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 
     //Verify and authenticate
+    console.log("params:", req.params);
     const { videoId } = req.params as { videoId?: string };
     if (!videoId) {
       throw new BadRequestError("Invalid video ID");
@@ -88,9 +90,12 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 
     //write to database
     console.log("updating DB");
-    video.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${uploadPath}`;
+    //video.videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${uploadPath}`;
+    video.videoURL = uploadPath;
+    
     updateVideo(cfg.db,video)
-
+    const signedVideo = await dbVideoToSignedVideo(cfg, video);
+    console.log(`signed video = ${signedVideo}`);
     //delete from tmp
     console.log(`Deleting temporary file from ${tmpPath}`);
     console.log(`Deleting temporary file from ${processedVideoPath}`);
@@ -98,7 +103,7 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     await rm(processedVideoPath, { force: true });
 
 
-  return respondWithJSON(200, video);
+  return respondWithJSON(200, signedVideo);
 }
 
 //get the aspect ration of a video
@@ -148,4 +153,15 @@ async function processVideoForFastStart(inputFilePath: string) {
 
   return outputFilePath;
 
+}
+
+async function generatePresignedURL(cfg: ApiConfig, key: string, expireTime: number) {
+  const presignedURL = cfg.s3Client.presign(key, {expiresIn: expireTime});
+  return presignedURL;
+}
+
+export async function dbVideoToSignedVideo(cfg: ApiConfig, video: Video) {
+  const key = String(video.videoURL);
+  video.videoURL = await generatePresignedURL(cfg, key, 3600);
+  return video;
 }
